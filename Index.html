@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pharma Supply Chain Sustainability Engagement</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+/* Simple animation for modals */
+@keyframes fadeIn {
+from { opacity: 0; transform: scale(0.95); }
+to { opacity: 1; transform: scale(1); }
+}
+.animate-fade-in {
+animation: fadeIn 0.3s ease-out forwards;
+}
+/* Custom pulse for info buttons */
+@keyframes pulse-red {
+0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+}
+.animate-pulse-red {
+animation: pulse-red 2s infinite;
+}
+body {
+font-family: 'Inter', sans-serif;
+}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+/* Styles for Kanban drag-and-drop */
+.kanban-column {
+  min-height: 200px; /* Ensure columns have a minimum height for dropping */
+}
+.kanban-card {
+  cursor: grab;
+}
+.kanban-card:active {
+  cursor: grabbing;
+  opacity: 0.8;
+  transform: scale(1.02);
+}
+.dragging-over {
+    background-color: #f0f9ff; /* A light blue to indicate a valid drop target */
+    border-color: #38bdf8;
+    border-style: dashed;
+}
+/* Hide interaction controls by default */
+.interaction-controls {
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+}
+/* Show on hover of parent */
+.group:hover .interaction-controls {
+    opacity: 1;
+}
+
+</style>
+</head>
+<body class="bg-gray-50">
+<div id="root"></div>
+
+<script type="module">
+    // --- Firebase Imports ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, onSnapshot, getDoc, updateDoc, deleteField, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // --- Babel/React Integration ---
+    window.firebase = {
+        initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken,
+        getFirestore, doc, setDoc, onSnapshot, getDoc, updateDoc, deleteField, setLogLevel
+    };
+</script>
+
+<script type="text/babel">
+const { useState, Fragment, useRef, useEffect, useCallback } = React;
+const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, getFirestore, doc, setDoc, onSnapshot, getDoc, updateDoc, deleteField, setLogLevel } = window.firebase;
+
+// --- MOCK ICONS ---
+const Icons = {
+    FlaskConical: '🧪', Leaf: '🍃', Factory: '🏭', Truck: '🚚', Package: '📦', Cloud: '☁️', AlertTriangle: '⚠️', Shield: '🛡️', Zap: '⚡',
+    Workflow: '🔄', Layers: '📚', GitFork: '🍴', Building2: '🏢', Scale: '⚖️', Brain: '🧠', Wifi: '📶', Lock: '🔒', Recycle: '♻️', Droplets: '💧',
+    Flame: '🔥', TreePine: '🌲', DollarSign: '💲', Globe: '🌍', Briefcase: '💼', Pill: '💊', Trash2: '🗑️', Blend: '🌀', Globe2: '🌐', Link: '🔗',
+    XCircle: '⊗', RefreshCcw: '🔄', Sprout: '🌱', Store: '🏪', Atom: '⚛️', PackagePlus: '📦+', ArrowRightCircle: '➡️', Handshake: '🤝',
+    Target: '🎯', Telescope: '🔭', ExternalLink: '🔗', User: '👤', Dna: '🧬', Map: '🗺️', ChevronDown: '▼', ChevronUp: '▲', TestTube: '🧪',
+    Users: '👥', FileText: '📄', ClipboardCheck: '📋', X: '❌', LandPlot: '🏞️', Combine: '🚜', Beaker: '⚗️', PackageCheck: '📦✔️', Info: 'ℹ️',
+    FileSignature: '✍️', TrendingUp: '📈', Ship: '🚢', ShieldCheck: '🛡️✔️', OilRig: '🛢️', Gate: '🚪', Percent: '%', PiggyBank: '🐷', BarChart: '📊',
+    Warning: '❗', Eye: '👁️', Clock: '🕒', Rocket: '🚀', Save: '💾', Edit: '✏️', PlusCircle: '⊕', Lightbulb: '💡', ListChecks: '✅', Bullseye: '🎯', Flag: '🚩'
+};
+
+// --- MODAL COMPONENTS ---
+const SublayerModal = ({ onClose, title, subStages }) => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 animate-fade-in">
+        <div className="bg-white rounded-xl shadow-2xl p-8 max-w-5xl w-full relative">
+            <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800"><span className="text-2xl">{Icons.X}</span></button>
+            <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">{title}</h2>
+            <div className="flex flex-col md:flex-row items-stretch justify-between space-y-4 md:space-y-0 md:space-x-4">
+                {subStages.map((stage, index) => (
+                    <Fragment key={stage.name}>
+                        <div className="flex flex-col items-center text-center w-full md:w-1/6 p-2 rounded-lg bg-gray-50">
+                            <div className="p-3 text-4xl bg-indigo-100 rounded-full mb-2 text-indigo-600">{stage.icon}</div>
+                            <h3 className="font-bold text-sm mb-2">{stage.name}</h3>
+                            {stage.companies && <p className="text-xs text-indigo-700 font-semibold mb-2">{stage.companies}</p>}
+                            <p className="text-xs text-gray-600 mb-2">{stage.description}</p>
+                            {stage.flow && <p className="text-xs text-gray-500 italic">"{stage.flow}"</p>}
+                        </div>
+                        {index < subStages.length - 1 && (
+                            <div className="text-gray-300 hidden md:flex items-center text-4xl">{Icons.ArrowRightCircle}</div>
+                        )}
+                    </Fragment>
+                ))}
+            </div>
+        </div>
+    </div>
+);
+
+const OverlapModal = ({ onClose, data }) => {
+    if (!data) return null;
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 animate-fade-in">
+            <div className="bg-white rounded-xl shadow-2xl p-8 max-w-3xl w-full relative">
+                <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800"><span className="text-2xl">{Icons.X}</span></button>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">{data.title}</h2>
+                <p className="text-sm text-gray-600 mb-6">{data.summary}</p>
+                <div className="space-y-4">
+                    <div>
+                        <h3 className="font-semibold text-red-700 mb-2 flex items-center"><span className="mr-2">{Icons.PiggyBank}</span>Cost Drivers</h3>
+                        <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">{data.costDrivers.map((item, i) => <li key={`cost-${i}`}>{item}</li>)}</ul>
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-green-700 mb-2 flex items-center"><span className="mr-2">{Icons.BarChart}</span>Profit & Value Levers</h3>
+                        <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">{data.profitLevers.map((item, i) => <li key={`profit-${i}`}>{item}</li>)}</ul>
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-yellow-700 mb-2 flex items-center"><span className="mr-2">{Icons.Warning}</span>Risk & Exposure</h3>
+                        <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">{data.riskExposure.map((item, i) => <li key={`risk-${i}`}>{item}</li>)}</ul>
+                    </div>
+                    <div className="pt-4 border-t">
+                        <h3 className="font-semibold text-gray-800 mb-2 flex items-center"><span className="mr-2">{Icons.Eye}</span>C-Suite View</h3>
+                        <p className="text-sm text-gray-700 italic">{data.executiveView}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const NightingaleStrategyModal = ({ onClose, data }) => (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4 animate-fade-in">
+        <div className="bg-white rounded-xl shadow-2xl p-8 max-w-5xl w-full relative max-h-[90vh] overflow-y-auto">
+            <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800"><span className="text-2xl">{Icons.X}</span></button>
+            <h2 className="text-3xl font-bold text-center text-gray-800 mb-2">{data.title}</h2>
+            <p className="text-center text-gray-500 mb-8">{data.subtitle}</p>
+            
+            <div className="space-y-8">
+                <section>
+                    <h3 className="text-2xl font-bold text-rose-700 mb-4 border-b-2 border-rose-200 pb-2">{data.imperative.title}</h3>
+                    <div className="grid md:grid-cols-3 gap-6 text-sm">
+                        {data.imperative.points.map(point => (
+                            <div key={point.title} className="bg-rose-50 p-4 rounded-lg">
+                                <h4 className="font-bold text-rose-800 mb-2">{point.title}</h4>
+                                <p className="text-gray-700 mb-2">{point.problem}</p>
+                                <p className="text-xs text-gray-600"><span className="font-semibold">Insight:</span> {point.insight}</p>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+                <section>
+                    <h3 className="text-2xl font-bold text-sky-700 mb-4 border-b-2 border-sky-200 pb-2">{data.solution.title}</h3>
+                    <div className="bg-sky-50 p-4 rounded-lg mb-6">
+                        <h4 className="font-bold text-sky-800 mb-2">{data.solution.fund.title}</h4>
+                        <p className="text-sm text-gray-700">{data.solution.fund.description}</p>
+                    </div>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 text-sm">
+                        {data.solution.pillars.map(pillar => (
+                            <div key={pillar.title} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                <h4 className="font-bold text-sky-800 mb-2">{pillar.title}</h4>
+                                <p className="text-gray-700 mb-2"><span className="font-semibold">Goal:</span> {pillar.goal}</p>
+                                <p className="text-gray-700"><span className="font-semibold">Action:</span> {pillar.action}</p>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+                <section>
+                    <h3 className="text-2xl font-bold text-emerald-700 mb-4 border-b-2 border-emerald-200 pb-2">{data.outcome.title}</h3>
+                    <div className="grid md:grid-cols-3 gap-6 text-sm">
+                        {data.outcome.points.map(point => (
+                            <div key={point.title} className="bg-emerald-50 p-4 rounded-lg">
+                                <h4 className="font-bold text-emerald-800 mb-2">{point.title}</h4>
+                                <ul className="list-disc list-inside text-gray-700 space-y-1">
+                                    {point.bullets.map((bullet, i) => <li key={`bullet-${i}`}>{bullet}</li>)}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+);
+
+// --- REVAMPED: EngagementModal with Advanced Planning Tools ---
+const EngagementModal = ({ onClose, stageId, existingPlan, onSavePlan }) => {
+    
+    const [activeTab, setActiveTab] = useState('plan');
+    const [planData, setPlanData] = useState({
+        notes: '',
+        actions: { todo: [], inProgress: [], done: [] },
+        stakeholders: []
+    });
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+    const [draggedItem, setDraggedItem] = useState(null);
+
+    useEffect(() => {
+        const initialPlan = existingPlan || {};
+        setPlanData({
+            notes: initialPlan.notes || '',
+            actions: initialPlan.actions || { todo: [], inProgress: [], done: [] },
+            stakeholders: initialPlan.stakeholders || []
+        });
+    }, [existingPlan]);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        setSaveSuccess(false);
+        try {
+            await onSavePlan(stageId, 'engagementPlan', planData);
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 2000);
+        } catch (error) {
+            console.error("Error saving plan:", error);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleInputChange = (field, value) => {
+        setPlanData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const addStakeholder = () => {
+        const newStakeholder = { id: crypto.randomUUID(), name: 'New Contact', title: '', company: '', notes: '' };
+        setPlanData(prev => ({ ...prev, stakeholders: [...(prev.stakeholders || []), newStakeholder] }));
+    };
+    
+    const updateStakeholder = (id, field, value) => {
+        setPlanData(prev => ({
+            ...prev,
+            stakeholders: prev.stakeholders.map(s => s.id === id ? { ...s, [field]: value } : s)
+        }));
+    };
+
+    const removeStakeholder = (id) => {
+        setPlanData(prev => ({ ...prev, stakeholders: prev.stakeholders.filter(s => s.id !== id) }));
+    };
+
+    const addAction = (status) => {
+        const newAction = { id: crypto.randomUUID(), text: 'New Action Item' };
+        setPlanData(prev => ({
+            ...prev,
+            actions: { ...prev.actions, [status]: [...(prev.actions[status] || []), newAction] }
+        }));
+    };
+
+    const updateAction = (id, newText) => {
+        const newActions = { ...planData.actions };
+        for (const status in newActions) {
+            newActions[status] = newActions[status]?.map(a => a.id === id ? { ...a, text: newText } : a);
+        }
+        setPlanData(prev => ({ ...prev, actions: newActions }));
+    };
+    
+    const removeAction = (id) => {
+        const newActions = { ...planData.actions };
+        for (const status in newActions) {
+            newActions[status] = newActions[status]?.filter(a => a.id !== id);
+        }
+        setPlanData(prev => ({ ...prev, actions: newActions }));
+    };
+
+    const handleDragStart = (e, item, sourceStatus) => setDraggedItem({ ...item, sourceStatus });
+    const handleDragOver = (e) => { e.preventDefault(); e.currentTarget.classList.add('dragging-over'); };
+    const handleDragLeave = (e) => e.currentTarget.classList.remove('dragging-over');
+    const handleDrop = (e, targetStatus) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove('dragging-over');
+        if (!draggedItem || draggedItem.sourceStatus === targetStatus) return;
+        const newActions = { ...planData.actions };
+        newActions[draggedItem.sourceStatus] = newActions[draggedItem.sourceStatus].filter(a => a.id !== draggedItem.id);
+        newActions[targetStatus] = [...(newActions[targetStatus] || []), { id: draggedItem.id, text: draggedItem.text }];
+        setPlanData(prev => ({ ...prev, actions: newActions }));
+        setDraggedItem(null);
+    };
+
+    const renderTabContent = () => {
+        switch (activeTab) {
+            case 'actions':
+                return (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {Object.entries({ todo: 'To Do', inProgress: 'In Progress', done: 'Done' }).map(([status, title]) => (
+                            <div key={status} className="kanban-column bg-gray-100 p-3 rounded-lg border-2 border-transparent transition-colors" onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={(e) => handleDrop(e, status)}>
+                                <h4 className="font-bold text-gray-700 mb-3 text-center">{title}</h4>
+                                <div className="space-y-2">
+                                    {planData.actions[status]?.map(action => (
+                                        <div key={action.id} draggable onDragStart={(e) => handleDragStart(e, action, status)} className="kanban-card bg-white p-2 rounded shadow border flex justify-between items-center">
+                                            <input type="text" value={action.text} onChange={(e) => updateAction(action.id, e.target.value)} className="w-full text-sm bg-transparent focus:outline-none"/>
+                                            <button onClick={() => removeAction(action.id)} className="text-red-400 hover:text-red-600 ml-2"><span>{Icons.X}</span></button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={() => addAction(status)} className="mt-3 w-full text-sm text-teal-600 hover:text-teal-800 flex items-center justify-center p-1 rounded">
+                                    <span className="mr-1">{Icons.PlusCircle}</span> Add Task
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                );
+            case 'stakeholders':
+                 return (
+                    <div>
+                        <button onClick={addStakeholder} className="mb-4 flex items-center px-4 py-2 rounded-lg font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors text-sm">
+                            <span className="mr-2">{Icons.PlusCircle}</span> Add Stakeholder
+                        </button>
+                        <div className="space-y-4">
+                            {planData.stakeholders?.map(s => (
+                                <div key={s.id} className="bg-gray-50 p-4 rounded-lg shadow-sm border">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <input type="text" placeholder="Name" value={s.name} onChange={e => updateStakeholder(s.id, 'name', e.target.value)} className="p-2 border rounded w-full text-sm" />
+                                        <input type="text" placeholder="Title" value={s.title} onChange={e => updateStakeholder(s.id, 'title', e.target.value)} className="p-2 border rounded w-full text-sm" />
+                                        <input type="text" placeholder="Company/Organization" value={s.company} onChange={e => updateStakeholder(s.id, 'company', e.target.value)} className="p-2 border rounded w-full text-sm" />
+                                        <div className="md:col-span-2 flex items-center">
+                                            <textarea placeholder="Notes..." value={s.notes} onChange={e => updateStakeholder(s.id, 'notes', e.target.value)} className="p-2 border rounded w-full text-sm h-16" />
+                                            <button onClick={() => removeStakeholder(s.id)} className="text-red-500 hover:text-red-700 ml-4 p-2"><span className="text-2xl">{Icons.Trash2}</span></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            case 'plan':
+            default:
+                return (
+                    <textarea
+                        className="w-full h-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-shadow text-sm"
+                        placeholder="Detail your strategic notes, high-level objectives, and justifications here..."
+                        value={planData.notes}
+                        onChange={(e) => handleInputChange('notes', e.target.value)}
+                    />
+                );
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4 animate-fade-in">
+            <div className="bg-white rounded-xl shadow-2xl p-8 max-w-5xl w-full relative max-h-[90vh] overflow-y-auto">
+                <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800"><span className="text-2xl">{Icons.X}</span></button>
+                <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><span className="mr-3 text-teal-600">{Icons.Edit}</span>Engagement Plan Builder</h2>
+                
+                <div className="flex border-b mb-6">
+                    <button onClick={() => setActiveTab('plan')} className={`px-4 py-2 font-semibold ${activeTab === 'plan' ? 'border-b-2 border-teal-500 text-teal-600' : 'text-gray-500'}`}>Strategic Notes</button>
+                    <button onClick={() => setActiveTab('actions')} className={`px-4 py-2 font-semibold ${activeTab === 'actions' ? 'border-b-2 border-teal-500 text-teal-600' : 'text-gray-500'}`}>Action Plan</button>
+                    <button onClick={() => setActiveTab('stakeholders')} className={`px-4 py-2 font-semibold ${activeTab === 'stakeholders' ? 'border-b-2 border-teal-500 text-teal-600' : 'text-gray-500'}`}>Stakeholders</button>
+                </div>
+
+                {renderTabContent()}
+
+                <div className="mt-6 flex items-center justify-end">
+                    {saveSuccess && <p className="text-green-600 text-sm mr-4">Plan saved!</p>}
+                    <button onClick={handleSave} disabled={isSaving} className="flex items-center justify-center px-6 py-2 rounded-lg font-semibold text-white bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 transition-colors">
+                        <span className="mr-2">{Icons.Save}</span>
+                        {isSaving ? 'Saving...' : 'Save Plan'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const DelineationControlPanel = ({ data, activeDelineation, setActiveDelineation, onClose }) => {
+    const activeData = data[activeDelineation];
+    return (
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl z-20 bg-white/80 backdrop-blur-sm rounded-b-lg shadow-lg p-4 animate-fade-in">
+            <div className="flex justify-between items-start">
+                <div>
+                    <h3 className="font-bold text-lg text-rose-800">Delineation Analysis</h3>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                        {Object.entries(data).map(([key, { label }]) => (
+                            <button key={key} onClick={() => setActiveDelineation(key)} className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${activeDelineation === key ? 'bg-rose-600 text-white' : 'bg-rose-100 text-rose-800 hover:bg-rose-200'}`}>{label}</button>
+                        ))}
+                    </div>
+                </div>
+                <button onClick={onClose} className="text-gray-500 hover:text-gray-800"><span className="text-2xl">{Icons.X}</span></button>
+            </div>
+            {activeData && (
+                <div className="mt-4 pt-4 border-t border-rose-200 text-sm">
+                    <p className="text-gray-700">{activeData.description}</p>
+                    <p className="text-xs mt-2 text-gray-800"><b>Exec View:</b> {activeData.executiveView}</p>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// --- STATIC DATA ---
+const stages = [
+    { id: 'rd', name: 'R&D and Discovery', icon: Icons.FlaskConical, actors: ['Pharma R&D', 'Biotech Startups', 'Academia'] },
+    { id: 'resourceExtraction', name: 'Resource Extraction & Primary Processing', icon: Icons.Sprout, actors: ['Farmers', 'Miners', 'Oil & Gas Majors', 'Primary Processors'] },
+    { id: 'commodityTrading', name: 'Commodity Trading & Aggregation', icon: Icons.Store, actors: ['Commodity Traders', 'Brokers', 'Aggregators'] },
+    { id: 'specializedProcessing', name: 'Specialized Material Processing', icon: Icons.Atom, actors: ['Chemical Companies', 'Refineries', 'Specialty Processors'] },
+    { id: 'apiExcipientMfg', name: 'API/Excipient Manufacturing', icon: Icons.Factory, actors: ['CDMOs', 'Fine Chemical Co.', 'In-house Mfg.'] },
+    { id: 'drugProductMfg', name: 'Drug Product Manufacturing', icon: Icons.PackagePlus, actors: ['Big Pharma', 'CMOs', 'Generics Companies'] },
+    { id: 'distribution', name: 'Distribution & Logistics', icon: Icons.Truck, actors: ['Wholesalers', '3PL Providers', 'Specialty Distributors'] },
+    { id: 'endoflife', name: 'Dispensing & End-of-Useful-Life', icon: Icons.Package, actors: ['Pharmacies', 'Hospitals', 'Patients', 'Waste Mgmt.'] },
+];
+
+const sublayerData = {
+    rd: { title: 'The R&D Cycle', subStages: [ { name: 'Target ID & Validation', icon: Icons.Target, description: 'Identifying biological targets for intervention.'}, { name: 'Lead Discovery', icon: Icons.Telescope, description: 'Screening compounds to find "hits".'}, { name: 'Lead Optimization', icon: Icons.Beaker, description: 'Refining hits into viable drug candidates.'}, { name: 'Preclinical', icon: Icons.TestTube, description: 'Testing safety and efficacy in non-human models.'}, { name: 'Clinical Trials', icon: Icons.Users, description: 'Phase I, II, III trials in humans.'}, { name: 'Regulatory Approval', icon: Icons.FileSignature, description: 'Submitting data to agencies like the FDA.'}, ]},
+    resourceExtraction: { title: 'Upstream Flow', subStages: [ { name: 'Exploration/Cultivation', icon: Icons.Map, description: 'Finding or growing raw materials.'}, { name: 'Harvesting/Extraction', icon: Icons.Combine, description: 'Collecting the raw resource.'}, { name: 'Primary Processing', icon: Icons.Beaker, description: 'Initial purification or conversion.'}, ]},
+    commodityTrading: { title: 'The Commodity Market', subStages: [ { name: 'Aggregation', icon: Icons.Layers, description: 'Collecting materials from multiple sources.'}, { name: 'Quality Grading', icon: Icons.ClipboardCheck, description: 'Sorting materials by quality specifications.'}, { name: 'Global Shipping', icon: Icons.Ship, description: 'Transporting bulk commodities.'}, ]},
+    specializedProcessing: { title: 'Midstream Flow', subStages: [ { name: 'Feedstock Conversion', icon: Icons.OilRig, description: 'Initial chemical transformation.'}, { name: 'Purification', icon: Icons.Droplets, description: 'Removing impurities to meet specs.'}, { name: 'Intermediate Synthesis', icon: Icons.Atom, description: 'Creating precursor chemicals.'}, ]}
+};
+
+const overlapData = {
+    'commodityTrading-specializedProcessing': { title: 'From Commodity to Chemical Feedstock', summary: 'This is the critical procurement interface where undifferentiated global commodities are converted into specified inputs for chemical synthesis. Decisions here are dominated by managing price volatility and securing consistent quality.', costDrivers: ['Global commodity price fluctuations (e.g., price of crude oil, palm oil).', 'Freight, insurance, and tariff costs for international shipping.', 'Premiums for specific quality grades or certifications.', 'Hedging costs to lock in future prices.'], profitLevers: ['Volume discounts through large-scale purchasing.', 'Strategic sourcing from lower-cost regions.', 'Optimizing logistics and inventory to reduce carrying costs.'], riskExposure: ['Supply disruption due to geopolitical events or climate change.', 'Price shocks from market speculation.', 'Quality inconsistency from commingled sources.'], executiveView: 'The CFO is focused on hedging strategies and managing commodity price exposure. The COO and Head of Supply Chain are concerned with security of supply, supplier diversification, and the landed cost of goods. This is about de-risking the primary input stream.' },
+    'apiExcipientMfg-drugProductMfg': { title: 'From Ingredient to Formulation', summary: 'This interface represents the handoff of the most critical, high-value ingredients (APIs and key excipients) to the drug product manufacturer. The entire focus shifts from cost management to quality assurance, regulatory compliance, and mitigating single-source dependency.', costDrivers: ['High cost of GMP-compliant, highly purified APIs.', 'Stringent quality control and testing requirements.', 'Single-source dependency driving up prices.', 'Costs of auditing and qualifying suppliers.'], profitLevers: ['Long-term supply agreements to lock in pricing.', 'Backward integration (owning the API facility) for key products.', 'Process improvements to increase yield and reduce waste.'], riskExposure: ['A single supplier failure can halt production of a blockbuster drug.', 'Quality deviations can lead to massive recalls and regulatory action.', 'Geopolitical concentration of API manufacturing (e.g., in China and India).'], executiveView: 'The COO is obsessed with supply continuity and mitigating single-source risk. The Head of Quality sees this as the most critical control point. The CFO views this as a high-cost, low-flexibility part of the COGS that must be secured at all costs. The focus is on quality and security over pure cost optimization.' }
+};
+
+const horizonTrendsData = {
+ rd: { id: 'trend-rd', trend: 'Generative AI & In-Silico Discovery', timeframe: '2-5 Years', impact: 'Generative AI will reduce preclinical timelines and costs by 25-50% by enabling *de novo* drug design. This shifts discovery from physical screening to computational design, making the genetic data in biodiverse ecosystems a highly valuable, strategic asset for finding novel therapeutics. This creates a direct ROI for conservation partnerships.', icon: Icons.Brain, },
+ distribution: { id: 'trend-dist', trend: 'Decentralized & AI-Powered Clinical Trials', timeframe: '2-5 Years', impact: 'Digital platforms, wearables, and AI-driven patient selection will de-risk the most expensive phase of development. By reducing site costs and accelerating recruitment, this makes more R&D projects economically viable, including higher-risk discovery programs based on novel compounds from natural sources.', icon: Icons.Users, },
+ apiExcipientMfg: { id: 'trend-api', trend: 'AI-Optimized Green Chemistry & Sustainable Mfg.', timeframe: '5-10 Years', impact: 'AI will accelerate the adoption of Green Chemistry, optimizing reactions to reduce hazardous waste and reliance on petrochemicals. This lowers raw material, energy, and disposal costs while meeting ESG goals, increasing the strategic value of sustainable, bio-based feedstocks derived from well-managed ecosystems.', icon: Icons.Recycle, },
+ drugProductMfg: { id: 'trend-dp', trend: 'Quantum Computing & Synthetic Biology', timeframe: '10+ Years', impact: 'The convergence of Quantum Computing for molecular simulation and AI-driven Synthetic Biology will enable the design of entirely new classes of therapies. This long-term shift will create hyper-personalized medicines and place an even greater premium on unique biological information found only in nature.', icon: Icons.Rocket, }
+};
+
+const environmentalData = {
+    rd: { hotspot: 'low', hazardIdentification: [{id: 'env-rd-1', name: 'Chemical Reagents', icon: Icons.Beaker}, {id: 'env-rd-2', name: 'Biological Samples', icon: Icons.Dna}], exposureAssessment: [{id: 'env-rd-3', name: 'Controlled Lab Environment', icon: Icons.ShieldCheck}], riskCharacterization: [{id: 'env-rd-4', text: 'Low risk of direct environmental release from labs. The primary risks are upstream: potential for ecosystem damage and social conflict during sample collection if not ethically managed. R&D decisions also have high downstream impact by locking in petrochemical-based vs. greener manufacturing processes.'}] },
+    resourceExtraction: { hotspot: 'red', hazardIdentification: [{id: 'env-re-1', name: 'Habitat Destruction', icon: Icons.LandPlot}, {id: 'env-re-2', name: 'Fossil Fuels', icon: Icons.Flame}, {id: 'env-re-3', name: 'Water Use/Pollution', icon: Icons.Droplets}], exposureAssessment: [{id: 'env-re-4', name: 'Ecosystems', icon: Icons.TreePine}, {id: 'env-re-5', name: 'Local Communities', icon: Icons.Users}], riskCharacterization: [{id: 'env-re-6', text: 'High risk of ecosystem damage, biodiversity loss, water contamination, and significant GHG emissions from both agriculture and fossil fuel extraction.'}] },
+    commodityTrading: { hotspot: 'yellow', hazardIdentification: [{id: 'env-ct-1', name: 'Transportation Emissions', icon: Icons.Ship}, {id: 'env-ct-2', name: 'Energy for Storage', icon: Icons.Factory}], exposureAssessment: [{id: 'env-ct-3', name: 'Global Atmosphere', icon: Icons.Globe2}], riskCharacterization: [{id: 'env-ct-4', text: 'Moderate risk from global transportation emissions (especially maritime shipping of crude oil and chemicals) and energy for storage.'}] },
+    specializedProcessing: { hotspot: 'red', hazardIdentification: [{id: 'env-sp-1', name: 'Hazardous Solvents', icon: Icons.Beaker}, {id: 'env-sp-2', name: 'High Energy Use', icon: Icons.Zap}, {id: 'env-sp-3', name: 'Air & Water Emissions', icon: Icons.Cloud}], exposureAssessment: [{id: 'env-sp-4', name: 'Local Air/Watersheds', icon: Icons.Globe}, {id: 'env-sp-5', name: 'Workers', icon: Icons.User}], riskCharacterization: [{id: 'env-sp-6', text: 'High risk of air and water pollution from energy-intensive chemical reactions. Petrochemical refining is a major source of industrial emissions.'}] },
+    apiExcipientMfg: { hotspot: 'red', hazardIdentification: [{id: 'env-api-1', name: 'Active Pharmaceutical Ingredients (APIs)', icon: Icons.Pill}, {id: 'env-api-2', name: 'Solvent Waste', icon: Icons.Trash2}], exposureAssessment: [{id: 'env-api-3', name: 'Aquatic Ecosystems', icon: Icons.Droplets}], riskCharacterization: [{id: 'env-api-4', text: 'High risk of aquatic ecotoxicity from API discharge. Many processes are solvent and energy-intensive.'}] },
+    drugProductMfg: { hotspot: 'orange', hazardIdentification: [{id: 'env-dp-1', name: 'Single-Use Plastics', icon: Icons.Package}, {id: 'env-dp-2', name: 'High Energy Use (HVAC)', icon: Icons.Zap}], exposureAssessment: [{id: 'env-dp-3', name: 'Landfills', icon: Icons.Trash2}, {id: 'env-dp-4', name: 'Energy Grid', icon: Icons.Cloud}], riskCharacterization: [{id: 'env-dp-5', text: 'Moderate-high risk from high energy use and plastic waste from packaging and single-use systems.'}] },
+    distribution: { hotspot: 'yellow', hazardIdentification: [{id: 'env-dist-1', name: 'Vehicle Emissions', icon: Icons.Truck}, {id: 'env-dist-2', name: 'Energy for Cold Chain', icon: Icons.Zap}], exposureAssessment: [{ id: 'env-dist-3', name: 'Air Emissions', icon: Icons.Cloud }], riskCharacterization: [{id: 'env-dist-4', text: 'Moderate risk dominated by transportation emissions, including cold chain for biologics.'}] },
+    endoflife: { hotspot: 'red', hazardIdentification: [{id: 'env-eol-1', name: 'Pharmaceuticals in Environment (PiE)', icon: Icons.Pill}, {id: 'env-eol-2', name: 'Plastic Packaging Waste', icon: Icons.Package}], exposureAssessment: [{id: 'env-eol-3', name: 'Waterways & Wildlife', icon: Icons.Droplets}, {id: 'env-eol-4', name: 'Landfills', icon: Icons.Trash2}], riskCharacterization: [{id: 'env-eol-5', text: 'High risk of pharmaceutical pollution in the environment (PIE) and plastic pollution from packaging.'}] },
+};
+const structureData = {
+    rd: { corporate: [{id: 'struct-rd-1', text: 'R&D is largely in-house for Big Pharma, but heavily reliant on an external ecosystem of biotechs and academic labs for innovation.', icon: Icons.Building2}] },
+    commodityTrading: { corporate: [{id: 'struct-ct-1', text: 'Pharma companies do not directly trade commodities; they buy from specialized chemical processors who absorb this risk.', icon: Icons.Shield}], gaps: [{id: 'struct-ct-2', text: 'Extreme lack of transparency. The origin of a chemical precursor (e.g., the specific oil field) is completely lost.', icon: Icons.Eye}] },
+    specializedProcessing: { corporate: [{id: 'struct-sp-1', text: 'This tier is dominated by a few large, specialized chemical giants (e.g., BASF, Dow).', icon: Icons.Globe2}], gaps: [{id: 'struct-sp-2', text: 'Pharma has limited visibility or influence this far upstream, treating it as a "black box" that supplies necessary inputs.', icon: Icons.Gate}] },
+    apiExcipientMfg: { corporate: [{id: 'struct-api-1', text: 'A mix of in-house manufacturing for strategic drugs and heavy reliance on Contract Development and Manufacturing Organizations (CDMOs).', icon: Icons.Factory}], gaps: [{id: 'struct-api-2', text: 'Geographic concentration, especially in India and China, creates significant geopolitical supply chain risk.', icon: Icons.Warning}] },
+};
+const regulatoryDigitalData = {
+    rd: { regulatory: [{id: 'reg-rd-1', title: 'Nagoya Protocol (Access & Benefit-Sharing)', description: "Complex international treaty governing access to genetic resources. NGOs are critical partners for pharma in negotiating fair benefit-sharing agreements with host countries, mitigating risks of 'biopiracy' accusations, which can cause loss of market access and severe reputational damage.", icon: Icons.Handshake}, {id: 'reg-rd-2', title: 'Good Laboratory Practice (GLP)', description: 'Ensures consistency and reliability of non-clinical lab data. Adherence is non-negotiable for regulatory submissions.', icon: Icons.ClipboardCheck}], digital: [{id: 'dig-rd-1', title: 'AI in Drug Discovery', description: 'Accelerates target ID and lead optimization, lowering R&D costs. AI platforms can also help ensure data integrity for regulatory compliance.', icon: Icons.Brain}, {id: 'dig-rd-2', title: 'SaaS ELNs', description: 'Lowers IT costs vs. on-premise systems and simplifies collaboration with CROs, enhancing transparency in outsourced R&D.', icon: Icons.FileText}] },
+    resourceExtraction: { regulatory: [{id: 'reg-re-1', title: 'Corporate Sustainability Goals (e.g., SBTi)', description: "Investor and public pressure for validated emissions, water, and waste reduction targets. NGOs can act as third-party validators for these programs, lending credibility to corporate sustainability reports and preventing accusations of 'greenwashing' that pose a market risk.", icon: Icons.TrendingUp}], digital: [{id: 'dig-re-1', title: 'Satellite Imagery & Drones', description: 'Provide transparent, verifiable data on land use, deforestation, and agricultural practices, helping to ensure and prove compliance with sustainable sourcing regulations like the EUDR.', icon: Icons.Map}] },
+    commodityTrading: { regulatory: [{id: 'reg-ct-1', title: 'EU Deforestation-free Regulation (EUDR)', description: "Disrupts supply chains for key bio-based commodities (e.g., palm oil derivatives) by requiring strict traceability to the plot of land. NGOs can provide on-the-ground data and verification needed to comply, mitigating supply disruption risk.", icon: Icons.Leaf}, {id: 'reg-ct-2', title: 'REACH (EU Chemical Regs)', description: "Frameworks like REACH, often influenced by NGO advocacy, restrict hazardous substances. Non-compliance leads to fines and supply chain disruption if a key precursor is banned.", icon: Icons.Scale}], digital: [{id: 'dig-ct-1', title: 'Blockchain for Traceability (nascent)', description: 'Provides an immutable ledger to track materials from source to factory. This enhances supply chain transparency, helps verify compliance with sourcing regulations, and can lower audit costs.', icon: Icons.Link}] },
+    specializedProcessing: { regulatory: [{id: 'reg-sp-1', title: 'Environmental Permitting (CAA/CWA)', description: 'Strict permitting for site selection based on air/water emissions. Non-compliance blocks construction and carries heavy fines. NGOs often lead opposition based on this data.', icon: Icons.LandPlot}, {id: 'reg-sp-2', title: 'Community Right-to-Know (EPCRA)', description: 'Requires public disclosure of hazardous chemical inventories. Creates significant public opinion risk and influences site selection based on community acceptance.', icon: Icons.Users}, {id: 'reg-sp-3', title: 'HazMat Transportation Regs (DOT)', description: 'Governs logistics of moving chemical feedstocks. Adds cost and complexity; errors can cause significant shipping delays and supply chain disruption.', icon: Icons.Truck}], digital: [{id: 'dig-sp-1', title: 'IoT for Process Control', description: 'Real-time sensor data optimizes chemical reactions, lowering energy and raw material costs. Also provides a transparent, auditable data trail for environmental compliance reporting.', icon: Icons.Wifi}] },
+    apiExcipientMfg: { regulatory: [{id: 'reg-api-1', title: 'BIOSECURE Act / Local Production Mandates', description: "Geopolitical regulations aimed at reducing reliance on foreign suppliers (e.g., from China). This creates massive supply chain disruption risk and forces costly supplier diversification. Buyer consolidation to secure local supply can increase pricing power.", icon: Icons.Shield}, {id: 'reg-api-2', title: 'Good Manufacturing Practice (GMP)', description: 'The bedrock of pharma quality. A failed GMP audit can halt production, trigger recalls, and result in massive fines and loss of public trust.', icon: Icons.ClipboardCheck}], digital: [{id: 'dig-api-1', title: 'Digital Twins', description: 'Virtual models of the manufacturing process that optimize for yield and quality, lowering production costs. They also enable predictive compliance, identifying potential deviations before they occur.', icon: Icons.Layers}] },
+    drugProductMfg: { regulatory: [{id: 'reg-dp-1', title: 'EU Corporate Sustainability Reporting Directive (CSRD)', description: 'Mandates extensive disclosure on sustainability risks, including those in the supply chain. NGOs are key stakeholders in assessing these reports, influencing investor and public opinion.', icon: Icons.FileSignature}], digital: [{id: 'dig-dp-1', title: 'Continuous Manufacturing', description: 'Reduces plant footprint and lowers operational costs. The integrated nature of the process provides enhanced data collection, simplifying regulatory reporting and transparency.', icon: Icons.Workflow}] },
+    distribution: { regulatory: [{id: 'reg-dist-1', title: 'Drug Supply Chain Security Act (DSCSA)', description: 'Mandates an electronic, interoperable system to track prescription drugs. Failure to comply can disrupt market access and lead to penalties.', icon: Icons.Lock}], digital: [{id: 'dig-dist-1', title: 'AI for logistics optimization', description: 'Lowers fuel and shipping costs. For regulations like DSCSA, it provides robust data trails for track-and-trace, simplifying compliance and reducing the risk of counterfeit products.', icon: Icons.Truck}] },
+};
+const comminglingData = {
+    resourceExtraction: { prevalence: 'medium', details: [{id: 'comm-re-1', text: 'Problem starts here: materials from different farms or extraction sites are often blended at primary processing facilities before ever reaching traders.', icon: Icons.Combine}]},
+    commodityTrading: { prevalence: 'high', details: [{id: 'comm-ct-1', text: 'The primary node of commingling. Raw materials from countless global sources are blended, making origin traceability nearly impossible and obscuring upstream issues.', icon: Icons.Blend}]},
+    specializedProcessing: { prevalence: 'medium', details: [{id: 'comm-sp-1', text: 'Chemical intermediates from different production lines or even different plants may be mixed before sale.', icon: Icons.Blend}]},
+    apiExcipientMfg: { prevalence: 'medium', details: [{ id: 'comm-api-1', text: 'Precursor chemicals are sourced from diverse, sometimes commingled, global suppliers.', icon: Icons.Link }] },
+};
+const ventureData = {
+    rd: { goal: "Ensure Ethical Innovation and Mitigate Upstream Risk", ventureModel: "Develop a best-in-class ethical bioprospecting and benefit-sharing framework compliant with the Nagoya Protocol, ensuring equitable use of genetic resources. Simultaneously, fund R&D for bio-based alternatives to petrochemical solvents and feedstocks.", wwfValue: "WWF can act as policy partners for bioprospecting and also connect the company with innovators in the green chemistry space to accelerate the transition away from fossil-fuel-based inputs.", businessDrivers: "Mitigates legal/reputational risks of biopiracy, enhances brand value, and reduces long-term dependency on volatile petrochemical markets.", realWorldExample: "Pharma collaborations with academic institutions on green chemistry R&D and benefit-sharing agreements." },
+    resourceExtraction: { goal: "De-risk commodity supply & meet climate targets.", ventureModel: "For bio-based materials, develop 'insetting' projects with farming co-ops. For petrochemicals, invest in high-quality carbon capture or methane abatement projects that are directly linked to the fossil fuel value chain, beyond simple offsetting.", wwfValue: "WWF acts as a science-based partner for both agricultural projects and for verifying the integrity and additionality of carbon reduction projects in the fossil fuel sector, ensuring they are not 'greenwashing'.", businessDrivers: "Secures stable raw material supply. Provides a credible pathway to address Scope 3 emissions from petrochemicals. Creates an authentic ESG narrative.", realWorldExample: "Unilever's sustainable agriculture programs; Oil and Gas Climate Initiative (OGCI) investments in CCUS." },
+    specializedProcessing: { goal: "Drive Decarbonization & Efficiency in Chemical Production", ventureModel: "Co-invest with a key chemical supplier in a project to electrify a steam cracker or adopt a new, less energy-intensive catalytic process. The venture is structured around shared energy savings and reduced carbon tax liability.", wwfValue: "WWF can serve as a technical advisor and convener, bringing together chemical producers, technology providers, and policymakers to scale innovative, low-carbon chemical manufacturing technologies and standards.", businessDrivers: "Directly reduces the massive 'embodied carbon' in pharmaceutical ingredients. Mitigates risks from rising carbon prices. Drives innovation and long-term cost savings in a key supplier relationship.", realWorldExample: "The 'Cracker of the Future' consortium in Europe, where chemical companies collaborate on decarbonizing petrochemical production." },
+    apiExcipientMfg: { goal: "Reduce operational costs & mitigate water risk.", ventureModel: "Partner to implement advanced water recycling and efficiency technologies at a key supplier in a water-stressed region (e.g., India, China). The venture is profitable through shared savings from reduced water purchasing and wastewater treatment costs.", wwfValue: "WWF acts as a water stewardship strategist, using its Water Risk Filter tool for contextual risk analysis and convening stakeholders in a water basin. They can serve as a trusted intermediary to facilitate the shared savings model between the company and its supplier.", businessDrivers: "Mitigates supply chain disruption from water scarcity at critical facilities. Provides a direct ROI through shared savings. Proactively manages API discharge risks, a major reputational and regulatory concern.", realWorldExample: "The CEO Water Mandate initiative showcases corporate partnerships to address shared water challenges in high-risk basins." },
+    drugProductMfg: { goal: "Create circular revenue streams & reduce packaging costs.", ventureModel: "Launch a multi-company coalition (with an NGO as a neutral convener) to fund and scale advanced recycling for medical-grade plastics (e.g., blister packs). This creates a new, reliable source of recycled feedstock, reducing reliance on volatile virgin plastic prices.", wwfValue: "WWF serves as the neutral convener and policy advocate for the coalition. They provide a 'pre-competitive space,' connect the group with recycling innovators, and advocate for supportive policies that create a favorable market for recycled medical plastics.", businessDrivers: "Reduces reliance on volatile virgin plastic prices for long-term cost control. Ensures proactive compliance with emerging packaging regulations (e.g., EU PPWR). Demonstrates industry leadership.", realWorldExample: "The Healthcare Plastics Recycling Council (HPRC) is a pre-competitive collaboration working on this exact challenge." },
+    endoflife: { goal: "Enhance brand reputation & explore waste-to-value.", ventureModel: "Co-sponsor a national take-back program and invest in R&D for innovative disposal technologies (e.g., plasma gasification) that can safely destroy APIs while generating energy. This turns a brand risk and disposal cost into a managed process and a potential energy source.", wwfValue: "WWF acts as the authoritative science communicator and public awareness partner. They can translate and disseminate research on the ecological impacts of Pharmaceuticals in the Environment (PiE) and leverage their trusted brand to lead public education campaigns on proper drug disposal.", businessDrivers: "Mitigates significant brand risk associated with environmental drug pollution. Allows the company to proactively shape the narrative on a difficult issue, turning a liability into a demonstration of corporate responsibility.", realWorldExample: "DEA National Prescription Drug Take Back Day events demonstrate the public demand and logistical framework for such programs." }
+};
+const allFlowsData = {
+    semaglutide: { displayName: 'Blockbuster Biologic (Semaglutide)', color: 'text-sky-800', data: { rd: { companies: 'Academia, Novo Nordisk', flow: 'GLP-1 Research → Peptide Engineering', description: 'Decades of academic research into the GLP-1 hormone enabled Novo Nordisk to engineer a long-acting synthetic version, semaglutide.' }, resourceExtraction: { companies: 'Agricultural Co-ops', flow: 'Corn/Sugar Beet Farming', description: 'The ultimate raw material is sugar, derived from large-scale cultivation of crops like corn or sugar beets.' }, commodityTrading: { companies: 'ADM, Cargill, Bunge', flow: 'Crop Aggregation → Raw Sugar/Starch', description: 'Crops from numerous farms are purchased, aggregated, and processed into raw sugar or starch, traded as a global commodity.' }, specializedProcessing: { companies: 'Ingredient Processors', flow: 'Raw Sugar → Purified Glucose Media', description: 'Commodity sugar/starch is refined into a sterile, high-purity glucose media to feed the engineered microbes.'}, apiExcipientMfg: { companies: 'Novo Nordisk, CDMOs', flow: 'Amino Acids → Semaglutide API', description: 'The core of manufacturing: amino acids are linked in a precise sequence via Solid-Phase Peptide Synthesis (SPPS) to create the drug substance.' }, drugProductMfg: { companies: 'Novo Nordisk, CMOs', flow: 'API + Excipients → Injector Pen', description: 'The API is formulated into a sterile solution and filled into the proprietary, patient-friendly Ozempic injector pen device.' }, distribution: { companies: 'McKesson, Cencora, PBMs', flow: 'Manufacturer → Wholesaler → Pharmacy', description: 'Product moves through major distributors, but market access and pricing are heavily dictated by Pharmacy Benefit Managers (PBMs).' }, endoflife: { companies: 'Patients, Waste Services', flow: 'Dispensing → Use → Medical Waste', description: 'Pharmacies dispense to patients. Used injector pens are considered medical sharps and require special disposal, posing a waste challenge.' } } },
+    palm: { displayName: 'Bio-based (Palm Oil)', color: 'text-green-800', data: { resourceExtraction: { companies: 'Local Plantations', flow: 'Oil Palm Cultivation → Crude Palm Oil (CPO)', description: 'Cultivation of oil palm and primary processing into CPO.' }, commodityTrading: { companies: 'Cargill, Wilmar', flow: 'Aggregated CPO/PKO', description: 'CPO from various plantations is traded and aggregated on global markets, losing origin identity.' }, specializedProcessing: { companies: 'BASF, Croda', flow: 'CPO/PKO → Basic Oleochemicals', description: 'Large chemical manufacturers refine CPO into basic oleochemicals like fatty acids and glycerine.' }, apiExcipientMfg: { companies: 'Peter Greven, FACI', flow: 'Basic Oleochemicals → Pharma-grade Excipients', description: 'Specialized divisions purify oleochemicals into high-purity, GMP-compliant excipients like Magnesium Stearate.' }, drugProductMfg: { companies: ['Pfizer, J&J, etc.'], flow: 'Excipients + APIs → Finished Drug Product', description: 'Pharma companies formulate final drug products using these specialized excipients.' } } },
+    petro: { displayName: 'Petrochemical (Propylene Glycol)', color: 'text-gray-800', data: { resourceExtraction: { companies: 'ExxonMobil, Shell', flow: 'Crude Oil Extraction', description: 'Extraction of crude oil from terrestrial or offshore reserves.' }, commodityTrading: { companies: ['Vitol, Glencore'], flow: 'Aggregated Crude Oil', description: 'Crude oil is traded on global markets as standardized benchmarks, obscuring the specific oil field of origin.' }, specializedProcessing: { companies: 'Dow, LyondellBasell', flow: 'Crude Oil → Propylene Oxide', description: 'Crude oil is refined and \'cracked\' into propylene, then oxidized to create propylene oxide, a key intermediate.' }, apiExcipientMfg: { companies: 'BASF, Dow', flow: 'Propylene Oxide → Propylene Glycol (USP)', description: 'Propylene oxide is hydrolyzed and heavily purified to meet stringent USP standards for use as a solvent.' }, drugProductMfg: { companies: 'Pfizer, Novartis', flow: 'Propylene Glycol + APIs → Finished Drug', description: 'USP-grade propylene glycol is used as a key solvent in many oral, topical, and injectable formulations.' } } },
+    lactose: { displayName: 'Dairy-derived (Lactose)', color: 'text-blue-800', data: { resourceExtraction: { companies: 'Dairy Farms', flow: 'Dairy Farming → Raw Milk', description: 'Collection of raw milk from numerous dairy farms, a byproduct of the larger food industry.' }, commodityTrading: { companies: ['Hoogwegt Group, Interfood'], flow: 'Whey Processing → Crude Lactose', description: 'Milk is processed for cheese, leaving whey, which is concentrated to crystallize out crude lactose.' }, specializedProcessing: { companies: ['Kerry Group, FrieslandCampina'], flow: 'Crude Lactose → Refined Lactose', description: 'Crude lactose is re-dissolved, filtered, and re-crystallized multiple times to remove impurities.' }, apiExcipientMfg: { companies: 'DFE Pharma, Meggle', flow: 'Refined Lactose → Milled Pharma-Grade Lactose', description: 'Highly pure lactose is milled to specific particle sizes for tablets and inhalers.' }, drugProductMfg: { companies: ['All major pharma'], flow: 'Lactose + APIs → Finished Tablets', description: 'Pharma-grade lactose is one of the most common excipients, used as a filler or binder.' } } },
+    cellulose: { displayName: 'Plant-derived (Cellulose)', color: 'text-emerald-800', data: { resourceExtraction: { companies: 'Forestry Co-ops', flow: 'Sustainable Forestry → Wood Pulp', description: 'Harvesting of trees from managed forests and processing into wood pulp.' }, commodityTrading: { companies: ['Ekman & Co, CellMark'], flow: 'Pulp Trading & Aggregation', description: 'Wood pulp is traded as a global commodity, often blended from various forestry sources.' }, specializedProcessing: { companies: 'DuPont, FMC', flow: 'Wood Pulp → Microcrystalline Cellulose (MCC)', description: 'Purified pulp undergoes acid hydrolysis to remove amorphous regions, leaving crystalline micro-fibrils (MCC).' }, apiExcipientMfg: { companies: 'DuPont, JRS Pharma', flow: 'MCC → Pharma-Grade MCC Powder', description: 'The MCC is dried, milled, and tested to meet pharmacopeia standards for use as a binder.' }, drugProductMfg: { companies: ['Most pharma companies'], flow: 'MCC + APIs → Finished Tablets', description: 'MCC is a critical excipient used to form hard tablets that dissolve correctly in the body.' } } },
+};
+const marketAccessData = {
+    rd: { title: "Executive View: R&D Implications", points: [{id: 'ma-rd-1', text: 'High R&D costs must be recouped; pricing reflects value and innovation, not just COGS.', icon: Icons.PiggyBank}] },
+    drugProductMfg: { title: "Executive View: Manufacturing & Profitability", points: [{id: 'ma-dp-1', text: 'PBMs and payers demand rebates and discounts, squeezing gross-to-net margins.', icon: Icons.Percent}] },
+    distribution: { title: "Executive View: Channel Control", points: [{id: 'ma-dist-1', text: 'Wholesalers control physical access to pharmacies but have little influence on which drug is chosen.', icon: Icons.Gate}] },
+    endoflife: { title: "Executive View: Patient Access & Gatekeeping", points: [{id: 'ma-eol-1', text: 'PBM formularies act as the ultimate gatekeepers, determining which drugs are covered and accessible to patients.', icon: Icons.Users}] }
+};
+const delineationData = {
+    solvent: { label: 'Solvent Recovery', from: 'apiExcipientMfg', to: 'specializedProcessing', color: '#F59E0B', bend: -40, description: 'Used petrochemical solvents from API manufacturing are not discarded but sent back to specialized chemical processors for re-distillation and purification. This creates a circular economy for high-value materials.', executiveView: 'A direct COGS reduction strategy. Reduces hazardous waste disposal costs and lowers raw material purchasing costs. A key operational efficiency metric.' },
+    intermediateLoop: { label: 'Intermediate Looping', from: 'apiExcipientMfg', to: 'specializedProcessing', color: '#6366F1', bend: 40, description: 'A specialty chemical firm (A) makes Intermediate X. A pharma CDMO uses X to make an API, generating byproduct Y. Firm A (or competitor B) then buys Y as a cheap feedstock to make a different, simpler chemical product.', executiveView: 'An opportunistic market dynamic. Creates complex supplier interdependencies and potential for cost savings by valorizing waste streams. Requires sophisticated procurement to manage.' },
+    byproductSynergy: { label: 'Byproduct Synergy', from: 'apiExcipientMfg', to: 'resourceExtraction', color: '#34D399', bend: 60, description: 'A waste stream from API synthesis (e.g., an ammonium salt solution) is captured, processed, and sold to the agricultural industry as a nitrogen-rich liquid fertilizer, offsetting disposal costs.', executiveView: 'A sustainability and cost-offset initiative. Turns a waste liability into a minor revenue stream and demonstrates circular economy principles, enhancing ESG ratings.' }
+};
+
+const nightingaleStrategyData = {
+    title: "The Nightingale Strategy Framework",
+    subtitle: "A New Framework for Value, Trust, and Leadership in U.S. Pharma",
+    imperative: {
+        title: "I. The Strategic Imperative: A Crisis of Trust and Value (The 'Why')",
+        points: [
+            { title: "The Trust Deficit", problem: "The pharmaceutical industry is the least trusted business sector in the U.S.", insight: "61% of Americans hold a negative view, with 82% believing prices are unreasonable. This distrust directly impacts patient behavior and medication adherence." },
+            { title: "The Inefficient Commercial Engine", problem: "The Direct-to-Consumer (DTC) advertising model is broken, generating awareness but failing to convert it into filled prescriptions.", insight: "Despite billions in ad spend, 27% of all new U.S. prescriptions are never filled, primarily due to high out-of-pocket costs." },
+            { title: "Mounting External Pressures", problem: "The U.S. market is becoming increasingly volatile due to policy changes and political headwinds.", insight: "The Inflation Reduction Act (IRA) and potential tariffs create revenue and supply chain uncertainty, while the anti-ESG movement requires any initiative to be framed around pragmatic business ROI." }
+        ]
+    },
+    solution: {
+        title: "II. The Solution: A Strategic Reallocation of Capital (The 'How')",
+        fund: {
+            title: "Establish the 'Nightingale Fund'",
+            description: "A phased 35% reduction in DTC advertising spend over five years, reallocating billions annually to a portfolio of high-impact, value-creating initiatives. This is a strategic reinvestment, not a budget cut."
+        },
+        pillars: [
+            { title: "1. Operational Excellence", goal: "Generate quantifiable cost savings through verifiable sustainability measures.", action: "Adopt Process Mass Intensity (PMI) as a key manufacturing metric to directly cut costs for raw materials, energy, and waste disposal." },
+            { title: "2. Planetary & Public Health", goal: "Build an authentic, mission-aligned brand narrative.", action: "Launch a global forest conservation initiative, creating a powerful synergy between conservation and the future of R&D." },
+            { title: "3. Radical Transparency", goal: "Create a 'greenwashing-proof' program.", action: "Form an operational partnership with a leading environmental NGO to independently set, measure, and publicly report on all sustainability targets." },
+            { title: "4. DTP 2.0 & Affordability", goal: "Solve the patient's primary problem—affordability—and plug the 'leaky funnel.'", action: "Evolve Direct-to-Patient platforms to integrate Real-Time Prescription Benefit (RTPB) tools, directly addressing the 27% abandonment rate." }
+        ]
+    },
+    outcome: {
+        title: "III. The Outcome: The Sustainability Dividend (The 'What')",
+        points: [
+            { title: "Quantifiable Financial ROI", bullets: ["Recurring cost savings from green manufacturing.", "New long-term revenue from the sale of verified carbon credits.", "Direct revenue increase from reducing prescription abandonment."] },
+            { title: "Enhanced Reputational ROI", bullets: ["Increased trust and loyalty from a verifiable commitment to ESG.", "Stronger, non-promotional partnerships with patient advocacy groups."] },
+            { title: "Superior Investor ROI", bullets: ["Improved ESG ratings from agencies like Sustainalytics and MSCI.", "Positive correlation with stock performance, attracting high-quality institutional capital."] }
+        ]
+    }
+};
+
+// --- INTERACTIVE COMPONENTS ---
+const InteractiveListItem = ({ item, onUpdate, onDelete, onToggleFlag, itemType = 'text' }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editText, setEditText] = useState(item.text || item.name || item.title || item.description || '');
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [isEditing]);
+
+    const handleSave = () => {
+        if (editText.trim() === '') {
+            onDelete();
+        } else {
+            onUpdate(editText);
+        }
+        setIsEditing(false);
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') handleSave();
+        if (e.key === 'Escape') {
+            setEditText(item.text || item.name || item.title || item.description || '');
+            setIsEditing(false);
+        }
+    };
+
+    const textContent = item.text || item.name || item.title || item.description || '';
+
+    return (
+        <li className={`group relative flex items-start text-xs text-gray-700 p-1 rounded-md transition-colors ${item.isFlagged ? 'border-2 border-red-500 bg-red-50' : ''}`}>
+            {item.icon && <span className="w-4 h-4 mr-1.5 mt-0.5 shrink-0">{item.icon}</span>}
+            <div className="flex-grow">
+                {isEditing ? (
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        onBlur={handleSave}
+                        onKeyDown={handleKeyDown}
+                        className="w-full bg-white border border-blue-400 rounded px-1 py-0.5 text-xs"
+                    />
+                ) : (
+                    <>
+                        {itemType === 'title-desc' ? (
+                            <div>
+                                <strong className="font-semibold">{item.title}</strong>
+                                <p className="pl-5 text-gray-600">{item.description}</p>
+                            </div>
+                        ) : (
+                            <span>{textContent}</span>
+                        )}
+                    </>
+                )}
+            </div>
+            <div className="interaction-controls absolute right-0 top-1/2 -translate-y-1/2 bg-gray-200 bg-opacity-90 rounded-full px-2 py-1 flex items-center space-x-2">
+                <button onClick={() => setIsEditing(true)} className="text-gray-600 hover:text-blue-600" title="Edit">{Icons.Edit}</button>
+                <button onClick={onToggleFlag} className={`hover:text-red-600 ${item.isFlagged ? 'text-red-600' : 'text-gray-600'}`} title="Flag">{Icons.Flag}</button>
+                <button onClick={onDelete} className="text-gray-600 hover:text-red-600" title="Delete">{Icons.Trash2}</button>
+            </div>
+        </li>
+    );
+};
+
+const AnalysisSection = ({ title, color, items, onUpdate, onDelete, onToggleFlag, onAddItem, onNotesChange, notes }) => {
+    return (
+        <div>
+            <p className={`font-bold text-xs mb-1 ${color}`}>{title}</p>
+            <ul className="space-y-1 mb-2">
+                {items.map(item => (
+                    <InteractiveListItem
+                        key={item.id}
+                        item={item}
+                        onUpdate={(newText) => onUpdate(item.id, { ...item, text: newText, name: newText, title: newText, description: newText })}
+                        onDelete={() => onDelete(item.id)}
+                        onToggleFlag={() => onToggleFlag(item.id)}
+                        itemType={item.title && item.description ? 'title-desc' : 'text'}
+                    />
+                ))}
+            </ul>
+            <button onClick={onAddItem} className={`flex items-center text-xs ${color} hover:opacity-75 transition-opacity`}>
+                <span className="mr-1">{Icons.PlusCircle}</span> Add Item
+            </button>
+            <div className="mt-2">
+                <textarea
+                    value={notes}
+                    onChange={onNotesChange}
+                    placeholder="My Notes..."
+                    className="w-full text-xs p-2 border rounded-md bg-gray-50 focus:bg-white focus:ring-1 focus:ring-blue-400"
+                    rows="2"
+                />
+            </div>
+        </div>
+    );
+};
+
+const InteractiveTrendSection = ({ stageId, defaultTrend, userTrendData, onUpdate, onNotesChange, notes }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    
+    const trendData = { ...defaultTrend, ...userTrendData };
+    
+    const [editData, setEditData] = useState(trendData);
+
+    useEffect(() => {
+        setEditData({ ...defaultTrend, ...userTrendData });
+    }, [userTrendData, defaultTrend]);
+
+    const handleSave = () => {
+        onUpdate(editData);
+        setIsEditing(false);
+    };
+
+    return (
+        <div>
+            <p className="font-bold text-xs mb-1 text-gray-800">Horizon Trend:</p>
+            <div className={`group relative p-2 rounded-md transition-colors ${trendData.isFlagged ? 'border-2 border-red-500 bg-red-50' : 'bg-gray-50'}`}>
+                {isEditing ? (
+                     <div className="space-y-2">
+                        <input type="text" placeholder="Trend Title" value={editData.trend} onChange={e => setEditData(p => ({...p, trend: e.target.value}))} className="w-full text-xs p-1 border rounded font-semibold" />
+                        <input type="text" placeholder="Timeframe" value={editData.timeframe} onChange={e => setEditData(p => ({...p, timeframe: e.target.value}))} className="w-full text-xs p-1 border rounded" />
+                        <textarea placeholder="Impact" value={editData.impact} onChange={e => setEditData(p => ({...p, impact: e.target.value}))} className="w-full text-xs p-1 border rounded" rows="4" />
+                        <div className="flex justify-end space-x-2">
+                            <button onClick={() => setIsEditing(false)} className="text-xs bg-gray-200 px-3 py-1 rounded">Cancel</button>
+                            <button onClick={handleSave} className="text-xs bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Save</button>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        <div className="flex items-start text-xs text-gray-700 font-semibold mb-1">
+                            <span className="w-4 h-4 mr-1.5 mt-0.5 shrink-0">{trendData.icon}</span>
+                            <span>{trendData.trend}</span>
+                        </div>
+                        <p className="text-xs font-bold text-gray-500 mb-1 flex items-center">
+                            <span className="mr-1.5">{Icons.Clock}</span>{trendData.timeframe}
+                        </p>
+                        <p className="text-xs text-gray-600">{trendData.impact}</p>
+                    </>
+                )}
+
+                <div className="interaction-controls absolute right-1 top-1 bg-gray-200 bg-opacity-90 rounded-full p-1 flex items-center space-x-1">
+                    {!isEditing && <button onClick={() => setIsEditing(true)} className="text-gray-600 hover:text-blue-600 w-5 h-5 flex items-center justify-center" title="Edit">{Icons.Edit}</button>}
+                    <button onClick={() => onUpdate({ ...trendData, isFlagged: !trendData.isFlagged })} className={`hover:text-red-600 ${trendData.isFlagged ? 'text-red-600' : 'text-gray-600'} w-5 h-5 flex items-center justify-center`} title="Flag">{Icons.Flag}</button>
+                </div>
+            </div>
+             <div className="mt-2">
+                <textarea
+                    value={notes}
+                    onChange={onNotesChange}
+                    placeholder="My Notes on Trends..."
+                    className="w-full text-xs p-2 border rounded-md bg-gray-50 focus:bg-white focus:ring-1 focus:ring-blue-400"
+                    rows="2"
+                />
+            </div>
+        </div>
+    );
+};
+
+
+// --- MAIN APP COMPONENT ---
+const App = () => {
+    // --- State Declarations ---
+    const [showEnvironmentalLayer, setShowEnvironmentalLayer] = useState(false);
+    const [showStructureLayer, setShowStructureLayer] = useState(false);
+    const [showRegulatoryDigitalLayer, setShowRegulatoryDigitalLayer] = useState(false);
+    const [showComminglingLayer, setShowComminglingLayer] = useState(false);
+    const [showMyPlansLayer, setShowMyPlansLayer] = useState(false);
+    const [showHorizonLayer, setShowHorizonLayer] = useState(false);
+    const [showOverlaps, setShowOverlaps] = useState(false);
+    const [showMarketAccessLayer, setShowMarketAccessLayer] = useState(false);
+    const [showMethodology, setShowMethodology] = useState(false);
+    const [showNightingaleStrategy, setShowNightingaleStrategy] = useState(false);
+    const [activeFlow, setActiveFlow] = useState('none');
+    const [activeSublayer, setActiveSublayer] = useState(null);
+    const [activeOverlap, setActiveOverlap] = useState(null);
+    const [activeEngagement, setActiveEngagement] = useState(null);
+    const [delineationModeActive, setDelineationModeActive] = useState(false);
+    const [activeDelineation, setActiveDelineation] = useState('solvent');
+    const [delineationPath, setDelineationPath] = useState(null);
+    const stageRefs = useRef([]);
+
+    // --- Firebase State ---
+    const [db, setDb] = useState(null);
+    const [userId, setUserId] = useState(null);
+    const [userAnalysisData, setUserAnalysisData] = useState({});
+
+    // --- Firebase Initialization and Auth ---
+    useEffect(() => {
+        setLogLevel('debug');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        if (!firebaseConfig) { console.error("Firebase config is not available."); return; }
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            const firestore = getFirestore(app);
+            const authInstance = getAuth(app);
+            setDb(firestore);
+
+            onAuthStateChanged(authInstance, async (user) => {
+                if (user) {
+                    setUserId(user.uid);
+                } else {
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(authInstance, initialAuthToken);
+                        } else {
+                            await signInAnonymously(authInstance);
+                        }
+                    } catch (error) {
+                        console.error("Error during sign-in:", error);
+                    }
+                }
+            });
+        } catch (error) {
+            console.error("Error initializing Firebase:", error);
+        }
+    }, []);
+
+    // --- Firestore Data Sync for ALL User Analysis Data ---
+    useEffect(() => {
+        if (!db || !userId) return;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const docRef = doc(db, `artifacts/${appId}/users/${userId}/analysis/allStages`);
+        
+        const unsubscribe = onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setUserAnalysisData(docSnap.data());
+            } else {
+                setUserAnalysisData({});
+            }
+        }, (error) => {
+            console.error("Error listening to user analysis data:", error);
+        });
+
+        return () => unsubscribe();
+    }, [db, userId]);
+    
+    // --- Debounced Save Function ---
+    const debouncedSave = useCallback(
+        debounce((stageId, layerId, data) => {
+            if (!db || !userId) return;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const docRef = doc(db, `artifacts/${appId}/users/${userId}/analysis/allStages`);
+            const payload = { [`${stageId}.${layerId}`]: data };
+            setDoc(docRef, payload, { merge: true }).catch(err => console.error("Save failed:", err));
+        }, 500), [db, userId]
+    );
+
+    // --- Generic Handler for All Analysis Data Changes ---
+    const handleAnalysisChange = (stageId, layerId, newLayerData) => {
+        // Optimistic UI update
+        setUserAnalysisData(prevData => ({
+            ...prevData,
+            [stageId]: {
+                ...prevData[stageId],
+                [layerId]: newLayerData
+            }
+        }));
+        // Debounced save to Firestore
+        debouncedSave(stageId, layerId, newLayerData);
+    };
+
+    const getMergedLayerData = (stageId, layerId, defaultData) => {
+        const userLayerData = userAnalysisData?.[stageId]?.[layerId] || {};
+        const mergedItems = {};
+
+        // Process default items
+        defaultData.forEach(item => {
+            const userItem = userLayerData.items?.[item.id];
+            if (userItem?.isDeleted) {
+                // Skip deleted items
+            } else {
+                mergedItems[item.id] = { ...item, ...userItem };
+            }
+        });
+
+        // Add user-added items
+        if (userLayerData.items) {
+            Object.values(userLayerData.items).forEach(item => {
+                if (item.isUserAdded && !item.isDeleted) {
+                    mergedItems[item.id] = item;
+                }
+            });
+        }
+
+        return {
+            notes: userLayerData.notes || '',
+            items: Object.values(mergedItems)
+        };
+    };
+
+    // --- Delineation Path Calculation ---
+    const calculatePath = useCallback(() => {
+        if (!delineationModeActive || !activeDelineation || !stageRefs.current.length) {
+            setDelineationPath(null);
+            return;
+        }
+        const link = delineationData[activeDelineation];
+        if (!link) return;
+
+        const fromNodeIndex = stages.findIndex(s => s.id === link.from);
+        const toNodeIndex = stages.findIndex(s => s.id === link.to);
+        
+        const fromEl = stageRefs.current[fromNodeIndex];
+        const toEl = stageRefs.current[toNodeIndex];
+
+        if (!fromEl || !toEl) return;
+
+        const containerEl = fromEl.closest('.grid');
+        if (!containerEl) return;
+        const containerRect = containerEl.getBoundingClientRect();
+
+        const fromRect = fromEl.getBoundingClientRect();
+        const toRect = toEl.getBoundingClientRect();
+
+        const startX = fromRect.left - containerRect.left + fromRect.width / 2;
+        const startY = fromRect.top - containerRect.top + fromRect.height / 2;
+        const endX = toRect.left - containerRect.left + toRect.width / 2;
+        const endY = toRect.top - containerRect.top + toRect.height / 2;
+        
+        const dx = endX - startX;
+        const dy = endY - startY;
+        
+        const path = `M ${startX},${startY} C ${startX + dx / 2},${startY - link.bend} ${endX - dx / 2},${endY - link.bend} ${endX},${endY}`;
+        
+        setDelineationPath({ ...link, path });
+    }, [delineationModeActive, activeDelineation]);
+
+    useEffect(() => {
+        calculatePath();
+        window.addEventListener('resize', calculatePath);
+        return () => window.removeEventListener('resize', calculatePath);
+    }, [calculatePath]);
+
+    // --- HELPER FUNCTIONS ---
+    const getHotspotColorClass = (hotspot) => ({ 'red': 'bg-red-50 border-red-300', 'orange': 'bg-orange-50 border-orange-300', 'yellow': 'bg-yellow-50 border-yellow-300', 'low': 'bg-green-50 border-green-300' }[hotspot] || 'bg-white border-gray-200');
+    const getComminglingClass = (prevalence) => ({ 'high': 'border-blue-400 border-dashed', 'medium': 'border-blue-300 border-dashed' }[prevalence] || '');
+    const getExampleFlowHighlightClass = (stageId) => {
+        if (activeFlow === 'none') return '';
+        const relevantStages = Object.keys(allFlowsData[activeFlow].data);
+        return relevantStages.includes(stageId) ? 'border-orange-600 ring-2 ring-orange-300' : '';
+    };
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+    
+    const createLayerHandlers = (stageId, layerId) => {
+        const userLayerData = userAnalysisData?.[stageId]?.[layerId] || { items: {}, notes: '' };
+
+        return {
+            onUpdate: (itemId, updatedItemData) => {
+                const text = updatedItemData.text || updatedItemData.name || updatedItemData.title || '';
+                const newItems = {
+                    ...userLayerData.items,
+                    [itemId]: { ...userLayerData.items?.[itemId], text, name: text, title: text, description: updatedItemData.description || text }
+                };
+                handleAnalysisChange(stageId, layerId, { ...userLayerData, items: newItems });
+            },
+            onDelete: (itemId) => {
+                const newItems = {
+                    ...userLayerData.items,
+                    [itemId]: { ...userLayerData.items?.[itemId], isDeleted: true }
+                };
+                handleAnalysisChange(stageId, layerId, { ...userLayerData, items: newItems });
+            },
+            onToggleFlag: (itemId) => {
+                const currentItem = userLayerData.items?.[itemId] || {};
+                const newItems = {
+                    ...userLayerData.items,
+                    [itemId]: { ...currentItem, isFlagged: !currentItem.isFlagged }
+                };
+                handleAnalysisChange(stageId, layerId, { ...userLayerData, items: newItems });
+            },
+            onAddItem: () => {
+                const newItemId = `user-${crypto.randomUUID()}`;
+                const newItems = {
+                    ...userLayerData.items,
+                    [newItemId]: { id: newItemId, text: 'New insight...', isUserAdded: true }
+                };
+                handleAnalysisChange(stageId, layerId, { ...userLayerData, items: newItems });
+            },
+            onNotesChange: (e) => {
+                handleAnalysisChange(stageId, layerId, { ...userLayerData, notes: e.target.value });
+            }
+        };
+    };
+
+    // --- RENDER ---
+    return (
+        <div className="min-h-screen p-4 sm:p-6 lg:p-8 text-gray-800">
+            {activeSublayer && <SublayerModal onClose={() => setActiveSublayer(null)} {...sublayerData[activeSublayer]} />}
+            {activeOverlap && <OverlapModal onClose={() => setActiveOverlap(null)} data={overlapData[activeOverlap]} />}
+            {showNightingaleStrategy && <NightingaleStrategyModal onClose={() => setShowNightingaleStrategy(false)} data={nightingaleStrategyData} />}
+            {activeEngagement && <EngagementModal 
+                onClose={() => setActiveEngagement(null)} 
+                stageId={activeEngagement}
+                existingPlan={userAnalysisData[activeEngagement]?.engagementPlan}
+                onSavePlan={(stageId, layerId, data) => handleAnalysisChange(stageId, layerId, data)}
+            />}
+            
+            <div className="max-w-screen-2xl mx-auto">
+                <h1 className="text-3xl md:text-4xl font-bold text-center text-gray-800 mb-2">Pharmaceutical Manufacturing Supply Chain</h1>
+                <p className="text-center text-gray-600 mb-4 max-w-4xl mx-auto">An interactive tool for mapping the tiers of the pharma supply chain, uncovering hidden risks, and developing strategic engagement plans.</p>
+                {userId && <p className="text-center text-xs text-gray-400 mb-8">Session ID: {userId}</p>}
+                
+                <div className="flex flex-wrap justify-center items-center gap-3 mb-10 p-4 bg-white rounded-lg shadow-md">
+                    {/* Control Buttons */}
+                    <button onClick={() => setShowNightingaleStrategy(true)} className={`flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm bg-amber-100 text-amber-800 hover:bg-amber-200`}><span className="mr-2">{Icons.Lightbulb}</span> Nightingale Strategy</button>
+                    <button onClick={() => setShowMyPlansLayer(!showMyPlansLayer)} className={`flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm ${showMyPlansLayer ? 'bg-teal-600 text-white shadow' : 'bg-teal-100 text-teal-800 hover:bg-teal-200'}`}><span className="mr-2">{Icons.Edit}</span> My Plans</button>
+                    <button onClick={() => setShowEnvironmentalLayer(!showEnvironmentalLayer)} className={`flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm ${showEnvironmentalLayer ? 'bg-green-600 text-white shadow' : 'bg-green-100 text-green-800 hover:bg-green-200'}`}><span className="mr-2">{Icons.Leaf}</span> Environmental</button>
+                    <button onClick={() => setShowStructureLayer(!showStructureLayer)} className={`flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm ${showStructureLayer ? 'bg-purple-600 text-white shadow' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'}`}><span className="mr-2">{Icons.Layers}</span> Structure</button>
+                    <button onClick={() => setShowMarketAccessLayer(!showMarketAccessLayer)} className={`flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm ${showMarketAccessLayer ? 'bg-cyan-600 text-white shadow' : 'bg-cyan-100 text-cyan-800 hover:bg-cyan-200'}`}><span className="mr-2">{Icons.DollarSign}</span> Market Access</button>
+                    <button onClick={() => setDelineationModeActive(true)} className={`flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm bg-rose-100 text-rose-800 hover:bg-rose-200`}><span className="mr-2">{Icons.GitFork}</span> Delineation</button>
+                    <button onClick={() => setShowRegulatoryDigitalLayer(!showRegulatoryDigitalLayer)} className={`flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm ${showRegulatoryDigitalLayer ? 'bg-blue-600 text-white shadow' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}`}><span className="mr-2">{Icons.Workflow}</span> Regulatory & Digital</button>
+                    <button onClick={() => setShowComminglingLayer(!showComminglingLayer)} className={`flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm ${showComminglingLayer ? 'bg-indigo-600 text-white shadow' : 'bg-indigo-100 text-indigo-800 hover:bg-indigo-200'}`}><span className="mr-2">{Icons.Blend}</span> Commingling</button>
+                    <button onClick={() => setShowHorizonLayer(!showHorizonLayer)} className={`flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm ${showHorizonLayer ? 'bg-gray-700 text-white shadow' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}><span className="mr-2">{Icons.Telescope}</span> Trends</button>
+                    <button onClick={() => setShowOverlaps(!showOverlaps)} className={`flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm ${showOverlaps ? 'bg-red-600 text-white shadow' : 'bg-red-100 text-red-800 hover:bg-red-200'}`}><span className="mr-2">{Icons.Info}</span> Overlaps</button>
+                    <div className="relative">
+                        <select value={activeFlow} onChange={(e) => setActiveFlow(e.target.value)} className="appearance-none flex items-center px-4 py-2 rounded-full font-semibold transition-all duration-300 text-sm bg-orange-100 text-orange-800 hover:bg-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400" >
+                            <option value="none">Select Example Flow</option>
+                            {Object.entries(allFlowsData).map(([key, { displayName }]) => (
+                                <option key={key} value={key}>{displayName}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                <div className="relative">
+                    {delineationModeActive && (
+                        <DelineationControlPanel data={delineationData} activeDelineation={activeDelineation} setActiveDelineation={setActiveDelineation} onClose={() => setDelineationModeActive(false)} />
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
+                        {delineationModeActive && delineationPath && (
+                            <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-10" style={{ overflow: 'visible' }}>
+                                <defs>
+                                    <marker id={`arrow-${delineationPath.color}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                        <path d="M 0 0 L 10 5 L 0 10 z" fill={delineationPath.color} />
+                                    </marker>
+                                </defs>
+                                <path d={delineationPath.path} stroke={delineationPath.color} strokeWidth="2.5" fill="none" markerEnd={`url(#arrow-${delineationPath.color})`} style={{ filter: 'drop-shadow(0px 1px 1px rgba(0,0,0,0.3))' }} />
+                            </svg>
+                        )}
+                        {stages.map((stage, index) => {
+                            const flowData = activeFlow !== 'none' && allFlowsData[activeFlow].data[stage.id];
+                            const flowColor = activeFlow !== 'none' ? allFlowsData[activeFlow].color : '';
+                            const isDimmed = delineationModeActive && activeDelineation && ![delineationData[activeDelineation].from, delineationData[activeDelineation].to].includes(stage.id);
+                            const hasPlan = showMyPlansLayer && userAnalysisData[stage.id]?.engagementPlan;
+
+                            return (
+                                <div className="relative" key={stage.id} ref={el => stageRefs.current[index] = el}>
+                                    <div className={`flex flex-col p-4 rounded-xl border-2 shadow-lg min-h-[320px] h-full transition-all duration-500 ${isDimmed ? 'opacity-30' : 'opacity-100'} ${getExampleFlowHighlightClass(stage.id)} ${showEnvironmentalLayer && !getExampleFlowHighlightClass(stage.id) ? getHotspotColorClass(environmentalData[stage.id]?.hotspot) : 'border-gray-200'} ${!showEnvironmentalLayer && !getExampleFlowHighlightClass(stage.id) ? 'bg-white' : ''} ${showComminglingLayer ? getComminglingClass(comminglingData[stage.id]?.prevalence) : ''} ${hasPlan ? 'border-teal-400 ring-2 ring-teal-200' : ''} ${showMarketAccessLayer && marketAccessData[stage.id] ? 'border-cyan-400' : ''} ${showHorizonLayer && horizonTrendsData[stage.id] ? 'border-gray-500' : ''}`}>
+                                        <div className="flex items-center text-gray-700 mb-4">
+                                            <span className="text-4xl">{stage.icon}</span>
+                                            <h3 className="ml-3 text-md font-bold leading-tight">{stage.name}</h3>
+                                        </div>
+                                        <div className="text-sm mb-4">
+                                            <p className="font-semibold mb-1">Key Actors:</p>
+                                            <ul className="list-disc list-inside text-gray-600">{stage.actors.map(actor => <li key={actor}>{actor}</li>)}</ul>
+                                        </div>
+                                        {sublayerData[stage.id] && (<div className="mt-auto mb-2"><button onClick={() => setActiveSublayer(stage.id)} className="w-full text-center bg-indigo-100 text-indigo-700 hover:bg-indigo-200 font-semibold py-2 px-4 rounded-lg text-xs transition-colors">Explore Sub-Flow</button></div>)}
+                                        
+                                        <div className="space-y-3 flex-grow mt-auto pt-4 border-t border-gray-200">
+                                            {flowData && (
+                                                <div className="space-y-1 p-2 bg-orange-50 rounded-md">
+                                                    <p className={`font-bold text-xs ${flowColor}`}>{allFlowsData[activeFlow].displayName}:</p>
+                                                    <p className="text-xs text-gray-700"><span className="font-semibold">Companies:</span> {flowData.companies}</p>
+                                                    <p className="text-xs text-gray-700"><span className="font-semibold">Flow:</span> {flowData.flow}</p>
+                                                    <p className="text-xs text-gray-600 mt-1">{flowData.description}</p>
+                                                </div>
+                                            )}
+                                            
+                                            {showEnvironmentalLayer && environmentalData[stage.id] && (
+                                                <AnalysisSection
+                                                    title="Environmental Risk Assessment:"
+                                                    color="text-green-800"
+                                                    items={getMergedLayerData(stage.id, 'environmental', [
+                                                        ...environmentalData[stage.id].hazardIdentification,
+                                                        ...environmentalData[stage.id].exposureAssessment,
+                                                        ...environmentalData[stage.id].riskCharacterization
+                                                    ]).items}
+                                                    notes={getMergedLayerData(stage.id, 'environmental', []).notes}
+                                                    {...createLayerHandlers(stage.id, 'environmental')}
+                                                />
+                                            )}
+
+                                            {showStructureLayer && (structureData[stage.id]?.gaps || structureData[stage.id]?.corporate) && (
+                                                <AnalysisSection
+                                                    title="Structural Notes:"
+                                                    color="text-purple-800"
+                                                    items={getMergedLayerData(stage.id, 'structure', [
+                                                        ...(structureData[stage.id].corporate || []),
+                                                        ...(structureData[stage.id].gaps || [])
+                                                    ]).items}
+                                                    notes={getMergedLayerData(stage.id, 'structure', []).notes}
+                                                    {...createLayerHandlers(stage.id, 'structure')}
+                                                />
+                                            )}
+
+                                            {showMarketAccessLayer && marketAccessData[stage.id] && (
+                                                <AnalysisSection
+                                                    title={marketAccessData[stage.id].title + ':'}
+                                                    color="text-cyan-800"
+                                                    items={getMergedLayerData(stage.id, 'marketAccess', marketAccessData[stage.id].points).items}
+                                                    notes={getMergedLayerData(stage.id, 'marketAccess', []).notes}
+                                                    {...createLayerHandlers(stage.id, 'marketAccess')}
+                                                />
+                                            )}
+                                            
+                                            {showRegulatoryDigitalLayer && regulatoryDigitalData[stage.id] && (
+                                                <AnalysisSection
+                                                    title="Regulatory & Digital:"
+                                                    color="text-blue-800"
+                                                    items={getMergedLayerData(stage.id, 'regulatoryDigital', [
+                                                        ...(regulatoryDigitalData[stage.id].regulatory || []),
+                                                        ...(regulatoryDigitalData[stage.id].digital || [])
+                                                    ]).items}
+                                                    notes={getMergedLayerData(stage.id, 'regulatoryDigital', []).notes}
+                                                    {...createLayerHandlers(stage.id, 'regulatoryDigital')}
+                                                />
+                                            )}
+
+                                            {showHorizonLayer && horizonTrendsData[stage.id] && (
+                                                <InteractiveTrendSection
+                                                    stageId={stage.id}
+                                                    defaultTrend={horizonTrendsData[stage.id]}
+                                                    userTrendData={userAnalysisData[stage.id]?.trends}
+                                                    onUpdate={(updatedData) => handleAnalysisChange(stage.id, 'trends', updatedData)}
+                                                    notes={userAnalysisData[stage.id]?.trends?.notes || ''}
+                                                    onNotesChange={(e) => {
+                                                        const currentData = userAnalysisData[stage.id]?.trends || {};
+                                                        handleAnalysisChange(stage.id, 'trends', { ...currentData, notes: e.target.value });
+                                                    }}
+                                                />
+                                            )}
+
+                                        </div>
+                                        {ventureData[stage.id] && (<div className="mt-auto pt-2"><button onClick={() => setActiveEngagement(stage.id)} className="w-full bg-teal-100 text-teal-800 hover:bg-teal-200 font-semibold py-2 px-4 rounded-lg text-xs transition-colors">Develop Plan</button></div>)}
+                                    </div>
+                                    {showOverlaps && index < stages.length - 1 && (index + 1) % 4 !== 0 && (
+                                        <div className="absolute left-full top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-full z-20 hidden lg:flex items-center justify-center">
+                                            {overlapData[`${stage.id}-${stages[index + 1].id}`] ? (
+                                                <button onClick={() => setActiveOverlap(`${stage.id}-${stages[index + 1].id}`)} className="w-10 h-10 bg-red-200 rounded-full flex items-center justify-center text-red-700 hover:bg-red-300 transition-all shadow-lg animate-pulse-red"><span className="text-2xl">{Icons.Info}</span></button>
+                                            ) : (
+                                                <div className="w-8 h-8 text-gray-300 flex items-center justify-center text-4xl">{Icons.ArrowRightCircle}</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+
+                <div className="mt-12 p-6 bg-white rounded-xl shadow-lg">
+                    <button onClick={() => setShowMethodology(!showMethodology)} className="w-full flex justify-between items-center text-left">
+                        <h3 className="text-xl font-semibold text-gray-700">Legend & Methodology</h3>
+                        <span className="text-2xl text-gray-500">{showMethodology ? Icons.ChevronUp : Icons.ChevronDown}</span>
+                    </button>
+                    {showMethodology && (
+                        <div className="mt-4 border-t pt-4">
+                            <div className="mb-6">
+                                <h4 className="font-bold text-md text-gray-800 mb-2">Environmental Risk Assessment Framework</h4>
+                                <p className="text-sm text-gray-600 mb-2">The Environmental Exposure layer is structured according to a standard risk assessment framework. This provides a systematic way to evaluate potential adverse effects. The analysis is a qualitative simulation of the following steps:</p>
+                                <ol className="list-decimal list-inside text-sm space-y-1 text-gray-700">
+                                    <li><strong>Hazard Identification:</strong> Identifies the chemical and nonchemical stressors.</li>
+                                    <li><strong>Exposure Assessment:</strong> Identifies pathways by which stressors may reach individuals and ecosystems.</li>
+                                    <li><strong>Risk Characterization:</strong> Combines information to form an overall conclusion about risk.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const container = document.getElementById('root');
+const root = ReactDOM.createRoot(container);
+root.render(<App />);
+</script>
+</body>
+</html>
